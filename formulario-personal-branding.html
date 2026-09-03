@@ -64,6 +64,7 @@
   button:hover{background:#149c8e}
   button.ghost{background:transparent;color:var(--navy);border:1px solid var(--line)}
   button.ghost:hover{background:var(--zebra)}
+  #limpar{color:var(--muted);font-weight:normal}
   .note{color:var(--muted);font-size:13px}
 
   #saida{margin-top:28px;display:none}
@@ -184,7 +185,7 @@
       <label>Você se sente confortável mostrando vida pessoal?</label>
       <span class="hint">Família, rotina, treino, bastidor do dia a dia.</span>
       <div class="radios">
-        <label><input type="radio" name="q10" value="Sim, de boa"> Sim, de boa</label>
+        <label><input type="radio" name="q10" value="Sim, de boa" data-p="Mostra vida pessoal"> Sim, de boa</label>
         <label><input type="radio" name="q10" value="Um pouco"> Um pouco</label>
         <label><input type="radio" name="q10" value="Só profissional"> Só profissional</label>
       </div>
@@ -241,6 +242,7 @@
   <div class="actions">
     <button type="button" id="gerar">Gerar respostas</button>
     <button type="button" class="ghost" id="copiar">Copiar</button>
+    <button type="button" class="ghost" id="limpar">Limpar respostas</button>
     <span class="note">As respostas ficam aqui na tela pra você copiar e mandar no grupo.</span>
   </div>
 
@@ -256,6 +258,7 @@
 <script>
   var btnGerar = document.getElementById('gerar');
   var btnCopiar = document.getElementById('copiar');
+  var btnLimpar = document.getElementById('limpar');
   var saida = document.getElementById('saida');
   var resumo = document.getElementById('resumo');
 
@@ -265,12 +268,14 @@
     document.querySelectorAll('fieldset').forEach(function(fs){
       linhas.push('== ' + fs.querySelector('legend').textContent.toUpperCase() + ' ==');
       fs.querySelectorAll('.q').forEach(function(q){
-        var campo = q.querySelector('[data-p]');
-        if (campo) {
-          linhas.push(campo.dataset.p + ': ' + (campo.value.trim() || '—'));
+        var radios = q.querySelectorAll('input[type=radio]');
+        if (radios.length) {
+          var marcado = q.querySelector('input[type=radio]:checked');
+          var rotulo = (marcado && marcado.dataset.p) || radios[0].dataset.p || '';
+          linhas.push(rotulo + ': ' + (marcado ? marcado.value : '—'));
         } else {
-          var radio = q.querySelector('input[type=radio]:checked');
-          linhas.push('Mostra vida pessoal: ' + (radio ? radio.value : '—'));
+          var campo = q.querySelector('[data-p]');
+          if (campo) linhas.push(campo.dataset.p + ': ' + (campo.value.trim() || '—'));
         }
       });
       linhas.push('');
@@ -298,6 +303,53 @@
       btnCopiar.textContent = 'Copiado';
       setTimeout(function(){ btnCopiar.textContent = 'Copiar'; }, 1800);
     }
+  });
+
+  // rascunho do próprio usuário, só enquanto a aba viver: sessionStorage.
+  // Não é dado de negócio, não vai pra banco nenhum.
+  var CHAVE = 'pb-rascunho';
+
+  function campos(){
+    return document.querySelectorAll('.q input[type=text], .q textarea');
+  }
+  function radiosTodos(){
+    return document.querySelectorAll('.q input[type=radio]');
+  }
+
+  function salvarRascunho(){
+    var dados = {};
+    campos().forEach(function(c){ if (c.value.trim()) dados[c.id] = c.value; });
+    radiosTodos().forEach(function(r){ if (r.checked) dados[r.name] = r.value; });
+    try { sessionStorage.setItem(CHAVE, JSON.stringify(dados)); } catch (e) {}
+  }
+
+  function repopular(){
+    var bruto = null;
+    try { bruto = sessionStorage.getItem(CHAVE); } catch (e) { return; }
+    if (!bruto) return;
+    var dados;
+    try { dados = JSON.parse(bruto); } catch (e) { return; }
+    if (!dados || typeof dados !== 'object') return;
+    campos().forEach(function(c){
+      if (typeof dados[c.id] === 'string') c.value = dados[c.id];
+    });
+    radiosTodos().forEach(function(r){
+      if (dados[r.name] === r.value) r.checked = true;
+    });
+  }
+
+  document.addEventListener('input', salvarRascunho);
+  document.addEventListener('change', salvarRascunho);
+  repopular();
+
+  btnLimpar.addEventListener('click', function(){
+    if (!confirm('Apagar todas as respostas? Não tem como desfazer.')) return;
+    try { sessionStorage.removeItem(CHAVE); } catch (e) {}
+    campos().forEach(function(c){ c.value = ''; });
+    radiosTodos().forEach(function(r){ r.checked = false; });
+    resumo.value = '';
+    saida.style.display = 'none';
+    window.scrollTo({top: 0, behavior: 'smooth'});
   });
 </script>
 </body>
