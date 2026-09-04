@@ -328,14 +328,14 @@
 
     var campoNome = document.getElementById('q0');
     if (!(campoNome.value || '').trim()) {
-      mostrarErro('Falta o nome — e o unico campo obrigatorio. O resto pode ir em branco.');
+      mostrarErro('Falta o nome — é o único campo obrigatório. O resto pode ir em branco.');
       campoNome.focus();
       campoNome.scrollIntoView({behavior:'smooth', block:'center'});
       return;
     }
 
     if (!sb) {
-      mostrarErro('Nao consegui conectar (a biblioteca do Supabase nao carregou). Confere sua internet e tenta de novo — suas respostas continuam aqui.');
+      mostrarErro('Não consegui conectar (a biblioteca do Supabase não carregou). Confere sua internet e tenta de novo — suas respostas continuam aqui.');
       return;
     }
 
@@ -348,7 +348,7 @@
         // rascunho segue no sessionStorage, e o botao volta a funcionar.
         btnEnviar.disabled = false;
         btnEnviar.textContent = 'Enviar respostas';
-        mostrarErro('Nao consegui enviar: ' + res.error.message + '. Suas respostas continuam aqui — tenta de novo em instantes.');
+        mostrarErro('Não consegui enviar: ' + res.error.message + '. Suas respostas continuam aqui — tenta de novo em instantes.');
         return;
       }
       // So agora o rascunho pode sumir: o dado ja esta no banco.
@@ -359,7 +359,7 @@
     }).catch(function(e){
       btnEnviar.disabled = false;
       btnEnviar.textContent = 'Enviar respostas';
-      mostrarErro('Falha de conexao: ' + (e && e.message ? e.message : e) + '. Suas respostas continuam aqui — tenta de novo.');
+      mostrarErro('Falha de conexão: ' + (e && e.message ? e.message : e) + '. Suas respostas continuam aqui — tenta de novo.');
     });
   });
 
