@@ -63,6 +63,17 @@
   }
   button:hover{background:#149c8e}
   button.ghost{background:transparent;color:var(--navy);border:1px solid var(--line)}
+  button:disabled{opacity:.65;cursor:wait}
+  .erro-envio{
+    background:#fdecea;border-left:3px solid #c0392b;color:#7d241a;
+    padding:14px 16px;margin-top:16px;font-size:14px;border-radius:6px;
+  }
+  .erro-envio[hidden]{display:none}
+  #confirmacao[hidden]{display:none}
+  #confirmacao{padding:56px 0 40px;text-align:center}
+  #confirmacao h2{margin:0 0 6px;font-size:28px;color:var(--navy);letter-spacing:-.2px}
+  #confirmacao .under{margin:14px auto 22px}
+  #confirmacao p{margin:0 auto;max-width:440px;font-size:16px;color:var(--muted)}
   button.ghost:hover{background:var(--zebra)}
   #limpar{color:var(--muted);font-weight:normal}
   .note{color:var(--muted);font-size:13px}
@@ -242,73 +253,118 @@
   </fieldset>
 
   <div class="actions">
-    <button type="button" id="gerar">Gerar respostas</button>
-    <button type="button" class="ghost" id="copiar">Copiar</button>
+    <button type="button" id="enviar">Enviar respostas</button>
     <button type="button" class="ghost" id="limpar">Limpar respostas</button>
-    <span class="note">As respostas ficam aqui na tela pra você copiar e mandar no grupo.</span>
+    <span class="note">A gente recebe direto — não precisa copiar nem mandar no grupo.</span>
   </div>
 
-  <div id="saida">
-    <h3>Suas respostas</h3>
-    <div class="under"></div>
-    <textarea id="resumo" readonly></textarea>
-  </div>
+  <div class="erro-envio" id="erro-envio" hidden></div>
 
   <footer>Prado &amp; Co.</footer>
 </div>
 
-<script>
-  var btnGerar = document.getElementById('gerar');
-  var btnCopiar = document.getElementById('copiar');
-  var btnLimpar = document.getElementById('limpar');
-  var saida = document.getElementById('saida');
-  var resumo = document.getElementById('resumo');
+<div id="confirmacao" hidden>
+  <div class="wrap">
+    <h2>Recebemos, obrigado.</h2>
+    <div class="under"></div>
+    <p>A gente vai analisar suas respostas e voltar com a estratégia.</p>
+  </div>
+  <div class="wrap"><footer>Prado &amp; Co.</footer></div>
+</div>
 
-  function montar(){
-    var nome = (document.getElementById('q0').value || '').trim();
-    var linhas = ['PERSONAL BRANDING — ' + (nome ? nome.toUpperCase() : 'BRIEFING'), ''];
-    document.querySelectorAll('fieldset').forEach(function(fs){
-      linhas.push('== ' + fs.querySelector('legend').textContent.toUpperCase() + ' ==');
-      fs.querySelectorAll('.q').forEach(function(q){
-        var radios = q.querySelectorAll('input[type=radio]');
-        if (radios.length) {
-          var marcado = q.querySelector('input[type=radio]:checked');
-          var rotulo = (marcado && marcado.dataset.p) || radios[0].dataset.p || '';
-          linhas.push(rotulo + ': ' + (marcado ? marcado.value : '—'));
-        } else {
-          var campo = q.querySelector('[data-p]');
-          if (campo) linhas.push(campo.dataset.p + ': ' + (campo.value.trim() || '—'));
-        }
-      });
-      linhas.push('');
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+  // Conexao no mesmo padrao do formulario de imobiliaria: URL e chave anon
+  // inline. A chave e publica por design — quem protege o dado e a RLS, nao o
+  // segredo dela. Nesta tabela: anon INSERE, so authenticated LE. Quem
+  // preenche nao consegue ler o que os outros mandaram.
+  //
+  // Este repo e separado do PRADO IA e tem projeto Vercel proprio, entao NAO
+  // alcanca paineis/painel-da-prado/comum/ — por isso inline, e nao por
+  // descuido.
+  var SUPABASE_URL = 'https://avitrcjknuphgdgzlmen.supabase.co';
+  var SUPABASE_ANON_KEY = 'sb_publishable_lvl3-_q-XtJMsVWycGCUBQ_4ri4PLL5';
+
+  var btnEnviar = document.getElementById('enviar');
+  var btnLimpar = document.getElementById('limpar');
+  var boxErro = document.getElementById('erro-envio');
+  var telaForm = document.querySelector('.wrap');
+  var telaOk = document.getElementById('confirmacao');
+
+  var sb = null;
+  try {
+    if (typeof supabase !== 'undefined') sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  } catch (e) {}
+
+  // id do campo -> coluna da tabela. q10 e radio (name), o resto e id.
+  var MAPA = {
+    q0:'nome', q0b:'o_que_faz', q1:'visao_6_meses', q2:'diferencial', q3:'historia',
+    q4:'assunto_dominio', q5:'cliente_ideal', q6:'duvida_cliente', q7:'cliente_indesejado',
+    q8:'referencias_positivas', q9:'referencias_negativas', q11:'disponibilidade',
+    q12:'estrutura_gravacao', q13:'o_que_travou', q14:'assuntos_proibidos',
+    q15:'objetivo', q16:'ja_testou', q17:'redes'
+  };
+
+  function montarRegistro(){
+    var reg = {};
+    Object.keys(MAPA).forEach(function(id){
+      var el = document.getElementById(id);
+      var v = el ? (el.value || '').trim() : '';
+      reg[MAPA[id]] = v || null;   // vazio vira null, nunca string vazia
     });
-    return linhas.join('\n');
+    var radio = document.querySelector('input[name="q10"]:checked');
+    reg.mostra_vida_pessoal = radio ? radio.value : null;
+    return reg;
   }
 
-  btnGerar.addEventListener('click', function(){
-    resumo.value = montar();
-    saida.style.display = 'block';
-    saida.scrollIntoView({behavior:'smooth', block:'start'});
-  });
+  function mostrarErro(msg){
+    boxErro.textContent = msg;
+    boxErro.hidden = false;
+    boxErro.scrollIntoView({behavior:'smooth', block:'center'});
+  }
 
-  btnCopiar.addEventListener('click', function(){
-    if (!resumo.value) resumo.value = montar();
-    saida.style.display = 'block';
-    resumo.select();
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(resumo.value).then(function(){
-        btnCopiar.textContent = 'Copiado';
-        setTimeout(function(){ btnCopiar.textContent = 'Copiar'; }, 1800);
-      });
-    } else {
-      document.execCommand('copy');
-      btnCopiar.textContent = 'Copiado';
-      setTimeout(function(){ btnCopiar.textContent = 'Copiar'; }, 1800);
+  btnEnviar.addEventListener('click', function(){
+    boxErro.hidden = true;
+
+    var campoNome = document.getElementById('q0');
+    if (!(campoNome.value || '').trim()) {
+      mostrarErro('Falta o nome — e o unico campo obrigatorio. O resto pode ir em branco.');
+      campoNome.focus();
+      campoNome.scrollIntoView({behavior:'smooth', block:'center'});
+      return;
     }
+
+    if (!sb) {
+      mostrarErro('Nao consegui conectar (a biblioteca do Supabase nao carregou). Confere sua internet e tenta de novo — suas respostas continuam aqui.');
+      return;
+    }
+
+    btnEnviar.disabled = true;
+    btnEnviar.textContent = 'Enviando...';
+
+    sb.from('personal_branding_respostas').insert(montarRegistro()).then(function(res){
+      if (res.error) {
+        // Nunca perde o que a pessoa escreveu: o form continua na tela, o
+        // rascunho segue no sessionStorage, e o botao volta a funcionar.
+        btnEnviar.disabled = false;
+        btnEnviar.textContent = 'Enviar respostas';
+        mostrarErro('Nao consegui enviar: ' + res.error.message + '. Suas respostas continuam aqui — tenta de novo em instantes.');
+        return;
+      }
+      // So agora o rascunho pode sumir: o dado ja esta no banco.
+      try { sessionStorage.removeItem(CHAVE); } catch (e) {}
+      telaForm.style.display = 'none';
+      telaOk.hidden = false;
+      window.scrollTo({top: 0, behavior: 'smooth'});
+    }).catch(function(e){
+      btnEnviar.disabled = false;
+      btnEnviar.textContent = 'Enviar respostas';
+      mostrarErro('Falha de conexao: ' + (e && e.message ? e.message : e) + '. Suas respostas continuam aqui — tenta de novo.');
+    });
   });
 
-  // rascunho do próprio usuário, só enquanto a aba viver: sessionStorage.
-  // Não é dado de negócio, não vai pra banco nenhum.
+  // rascunho do proprio usuario, so enquanto a aba viver: sessionStorage.
+  // Nao e dado de negocio. Some quando o envio da certo, nao antes.
   var CHAVE = 'pb-rascunho';
 
   function campos(){
@@ -345,12 +401,11 @@
   repopular();
 
   btnLimpar.addEventListener('click', function(){
-    if (!confirm('Apagar todas as respostas? Não tem como desfazer.')) return;
+    if (!confirm('Apagar todas as respostas? Nao tem como desfazer.')) return;
     try { sessionStorage.removeItem(CHAVE); } catch (e) {}
     campos().forEach(function(c){ c.value = ''; });
     radiosTodos().forEach(function(r){ r.checked = false; });
-    resumo.value = '';
-    saida.style.display = 'none';
+    boxErro.hidden = true;
     window.scrollTo({top: 0, behavior: 'smooth'});
   });
 </script>
